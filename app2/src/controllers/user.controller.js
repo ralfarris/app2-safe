@@ -1,5 +1,6 @@
 import { prisma } from '../config/prisma.js';
 import bcrypt from 'bcryptjs';
+import { sanitizeBio } from '../utils/sanitizer.js'; // <-- BARIS BARU
 
 export const getPublicProfile = async (req, res) => {
     const { username } = req.params;
@@ -27,7 +28,7 @@ export const getPublicProfile = async (req, res) => {
     }
 };
 
-// *** TARGET KERENTANAN A03:2021-Injection (XSS) pada field bio ***
+// *** TARGET KERENTANAN X-12: Injection (XSS) pada field bio ***
 export const updateProfile = async (req, res) => {
     const currentUserId = req.user.user_id;
     const { username, email, bio, password } = req.body;
@@ -37,15 +38,10 @@ export const updateProfile = async (req, res) => {
     // Tambahkan field ke objek update hanya jika ada di request
     if (username) dataToUpdate.username = username;
     if (email) dataToUpdate.email = email;
-    if (bio) dataToUpdate.bio = bio;
+    if (bio !== undefined) dataToUpdate.bio = sanitizeBio(bio); // <-- [Perbaikan XSS] SANITASI BIO
 
     // Jika ada file gambar yang diunggah
-
-    // --- IMPLEMENTASI RENTAN (RCE): Hanya mengandalkan ekstensi file dari klien ---
-    // Di sini kita TIDAK melakukan validasi tipe MIME atau memeriksa magic bytes.
-    // Jika penyerang mengunggah file yang terlihat seperti JPG tapi berisi Shell code,
-    // dan ekstensi file diabaikan atau disalahgunakan (misal: "image.sh.jpg"), 
-    // sistem rentan dieksekusi jika server web (Nginx) salah konfigurasi.
+    // --- KERENTANAN A-4: RCE / Arbitrary File Upload sudah diperbaiki di middleware/upload.js ---
     if (req.file) {
         dataToUpdate.profile_picture_path = req.file.path;
     }
@@ -91,10 +87,6 @@ export const deleteAccount = async (req, res) => {
 
     try {
         // Hapus pengguna. Prisma menangani penghapusan kaskade
-        // pada tabel Thread, Post, PostLike, Attachment (jika di setup di schema)
-        // Catatan: Jika Anda tidak mengatur ON DELETE CASCADE di skema prisma, 
-        // Anda harus menghapus data terkait secara manual sebelum menghapus user.
-
         await prisma.user.delete({
             where: {
                 user_id: currentUserId,

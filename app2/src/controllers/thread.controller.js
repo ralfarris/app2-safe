@@ -1,6 +1,7 @@
 // app2/src/controllers/thread.controller.js
 import { Prisma } from '@prisma/client'; 
 import { prisma } from '../config/prisma.js';
+import { sanitizeContent } from '../utils/sanitizer.js'; // <-- PERUBAHAN #1: BARIS BARU
 
 // Controller untuk melihat daftar thread (Guest Access)
 export const getThreads = async (req, res) => {
@@ -154,17 +155,19 @@ export const createThread = async (req, res) => {
     }
 
     try {
-        // ** IMPLEMENTASI RENTAN: Tidak ada sanitasi pada 'content' **
+        // [Perbaikan XSS] Sanitasi konten sebelum disimpan
+        const safeContent = sanitizeContent(content); // <-- PERUBAHAN #2: BARIS BARU
+        
         const newThread = await prisma.thread.create({
             data: {
                 user_id: currentUserId,
                 title,
-                content,
+                content: safeContent, // <-- PERUBAHAN #3: Gunakan safeContent
             }
         });
 
         res.status(201).json({ 
-            message: "Thread berhasil dibuat (VULNERABLE XSS)", 
+            message: "Thread berhasil dibuat (XSS Fixed)", // PERUBAHAN #4: Ubah pesan
             thread: newThread 
         });
 
@@ -174,7 +177,7 @@ export const createThread = async (req, res) => {
     }
 };
 
-// *** TARGET KERENTANAN C-7: Broken Access Control (BAC) - Thread Update ***
+// *** TARGET KERENTANAN C-7: Broken Access Control (BAC) - Thread Update - FIXED ***
 export const updateThread = async (req, res) => {
     const currentUserId = req.user.user_id;
     const threadId = parseInt(req.params.id);
@@ -197,7 +200,6 @@ export const updateThread = async (req, res) => {
         if (thread.user_id !== currentUserId) {
             return res.status(403).json({ message: "Akses Ditolak. Anda hanya dapat mengedit thread milik Anda sendiri." });
         }
-        // --- END Perbaikan BAC ---
         
         const updatedThread = await prisma.thread.update({
             where: {
@@ -210,7 +212,7 @@ export const updateThread = async (req, res) => {
         });
 
         res.status(200).json({
-            message: "Thread berhasil diperbarui (BAC Fixed)", // Ubah pesan
+            message: "Thread berhasil diperbarui (BAC Fixed)", 
             thread: updatedThread
         });
 
@@ -223,7 +225,7 @@ export const updateThread = async (req, res) => {
     }
 };
 
-// *** TARGET KERENTANAN C-6: Broken Access Control (BAC) - Thread Delete ***
+// *** TARGET KERENTANAN C-6: Broken Access Control (BAC) - Thread Delete - FIXED ***
 export const deleteThread = async (req, res) => {
     const currentUserId = req.user.user_id;
     const threadId = parseInt(req.params.id);
@@ -237,12 +239,12 @@ export const deleteThread = async (req, res) => {
         await prisma.thread.delete({
             where: {
                 thread_id: threadId,
-                user_id: currentUserId, // <-- BARIS BARU: Memastikan hanya pemilik yang bisa menghapus
+                user_id: currentUserId, 
             }
         });
 
         res.status(200).json({
-            message: "Thread berhasil dihapus (BAC Fixed)." // Ubah pesan
+            message: "Thread berhasil dihapus (BAC Fixed)." 
         });
 
     } catch (error) {

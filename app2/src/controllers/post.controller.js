@@ -1,4 +1,5 @@
 import { prisma } from '../config/prisma.js';
+import { sanitizeContent } from '../utils/sanitizer.js'; // <-- PERUBAHAN #1: BARIS BARU
 
 // *** TARGET KERENTANAN X-11: Injection (XSS) pada 'content' ***
 export const createPost = async (req, res) => {
@@ -19,17 +20,19 @@ export const createPost = async (req, res) => {
             return res.status(404).json({ message: "Thread yang dituju tidak ditemukan." });
         }
 
-        // ** IMPLEMENTASI RENTAN: Tidak ada sanitasi pada 'content' **
+        // [Perbaikan XSS] Sanitasi konten sebelum disimpan
+        const safeContent = sanitizeContent(content); // <-- PERUBAHAN #2: BARIS BARU
+        
         const newPost = await prisma.post.create({
             data: {
                 user_id: currentUserId,
                 thread_id: threadId,
-                content,
+                content: safeContent, // <-- PERUBAHAN #3: Gunakan safeContent
             }
         });
 
         res.status(201).json({ 
-            message: "Balasan berhasil dibuat (VULNERABLE XSS)", 
+            message: "Balasan berhasil dibuat (XSS Fixed)", // PERUBAHAN #4: Ubah pesan
             post: newPost 
         });
 
@@ -39,7 +42,7 @@ export const createPost = async (req, res) => {
     }
 };
 
-// *** TARGET KERENTANAN C-8: Broken Access Control (BAC) - Post Update ***
+// *** TARGET KERENTANAN C-8: Broken Access Control (BAC) - Post Update - FIXED ***
 export const updatePost = async (req, res) => {
     const currentUserId = req.user.user_id;
     const postId = parseInt(req.params.postId);
@@ -57,7 +60,7 @@ export const updatePost = async (req, res) => {
         const updatedPost = await prisma.post.update({
             where: {
                 post_id: postId,
-                user_id: currentUserId, // <-- BARIS BARU: Memastikan hanya pemilik yang bisa update
+                user_id: currentUserId, 
             },
             data: {
                 content,
@@ -65,7 +68,7 @@ export const updatePost = async (req, res) => {
         });
 
         res.status(200).json({
-            message: "Balasan berhasil diperbarui (BAC Fixed)", // Ubah pesan
+            message: "Balasan berhasil diperbarui (BAC Fixed)", 
             post: updatedPost,
         });
 
@@ -78,7 +81,7 @@ export const updatePost = async (req, res) => {
     }
 };
 
-// *** TARGET KERENTANAN C-9: Broken Access Control (BAC) - Post Delete ***
+// *** TARGET KERENTANAN C-9: Broken Access Control (BAC) - Post Delete - FIXED ***
 export const deletePost = async (req, res) => {
     const currentUserId = req.user.user_id;
     const postId = parseInt(req.params.postId);
@@ -92,11 +95,11 @@ export const deletePost = async (req, res) => {
         await prisma.post.delete({
             where: {
                 post_id: postId,
-                user_id: currentUserId, // <-- BARIS BARU: Memastikan hanya pemilik yang bisa delete
+                user_id: currentUserId, 
             },
         });
 
-        res.status(200).json({ message: "Balasan berhasil dihapus (BAC Fixed)." }); // Ubah pesan
+        res.status(200).json({ message: "Balasan berhasil dihapus (BAC Fixed)." }); 
 
     } catch (error) {
         if (error.code === 'P2025') {
