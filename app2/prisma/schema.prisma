@@ -1,0 +1,106 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  user_id           Int       @id @default(autoincrement())
+  username          String    @unique @db.VarChar(255) // UK
+  email             String    @unique @db.VarChar(255) // UK
+  password          String    @db.VarChar(255)
+  bio               String?   @db.Text
+  profile_picture_path String? @db.VarChar(255)
+  created_at        DateTime  @default(now())
+  
+  // Relasi
+  threads           Thread[]
+  posts             Post[]
+  postLikes         PostLike[]
+  threadLikes ThreadLike[]
+  attachments       Attachment[]
+
+  @@map("user")
+}
+
+model Thread {
+  thread_id  Int       @id @default(autoincrement())
+  user_id    Int // FK ke User
+  title      String    @db.VarChar(255)
+  content    String    @db.Text
+  created_at DateTime  @default(now())
+
+  // Relasi
+  author     User      @relation(fields: [user_id], references: [user_id])
+  threadLikes ThreadLike[]
+  attachments Attachment[]
+  posts      Post[]
+
+  @@map("thread")
+}
+
+model Post {
+  post_id    Int       @id @default(autoincrement())
+  user_id    Int // FK ke User
+  thread_id  Int // FK ke Thread
+  content    String    @db.Text
+  created_at DateTime  @default(now())
+
+  // Relasi
+  author      User       @relation(fields: [user_id], references: [user_id])
+  thread      Thread     @relation(fields: [thread_id], references: [thread_id])
+  postLikes   PostLike[]
+  attachments Attachment[]
+
+  @@map("post")
+}
+
+model Attachment {
+  attachment_id Int       @id @default(autoincrement())
+  post_id       Int?
+  thread_id     Int?
+  user_id       Int // FK ke User
+  file_name     String    @db.VarChar(255)
+  file_path     String    @db.VarChar(255)
+  mime_type     String    @db.VarChar(255)
+  file_size     Int
+  created_at    DateTime  @default(now())
+
+  // Relasi
+  post          Post?     @relation(fields: [post_id], references: [post_id])
+  thread        Thread?   @relation(fields: [thread_id], references: [thread_id])
+  author        User      @relation(fields: [user_id], references: [user_id])
+
+  @@map("attachment")
+}
+
+model PostLike {
+  like_id    Int       @id @default(autoincrement())
+  post_id    Int 
+  user_id    Int
+  created_at DateTime  @default(now())
+
+  // Relasi
+  post       Post      @relation(fields: [post_id], references: [post_id])
+  user       User      @relation(fields: [user_id], references: [user_id])
+
+  @@unique([post_id, user_id])
+  @@map("post_like")
+}
+
+model ThreadLike {
+  like_id    Int       @id @default(autoincrement())
+  thread_id  Int // FK ke Thread
+  user_id    Int // FK ke User
+  created_at DateTime  @default(now())
+
+  // Relasi
+  thread     Thread    @relation(fields: [thread_id], references: [thread_id])
+  user       User      @relation(fields: [user_id], references: [user_id])
+
+  @@unique([thread_id, user_id])
+  @@map("thread_like")
+}

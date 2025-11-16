@@ -1,0 +1,49 @@
+services:
+  db_postgres:
+    image: postgres:17-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-app2_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-testpass}
+      POSTGRES_DB: ${POSTGRES_DB:-app2_db}
+    volumes:
+      - db_postgres_data:/var/lib/postgresql/data
+    networks:
+      - dso4
+
+  app2:
+    build:
+      context: ./app2
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      DB_HOST: db_postgres
+      DB_USER: ${POSTGRES_USER:-app2_user}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-testpass}
+      DB_NAME: ${POSTGRES_DB:-app2_db}
+      NODE_ENV: ${NODE_ENV:-development}
+    networks:
+      - dso4
+      - proxy
+    volumes:
+      - app2_uploads:/app/uploads 
+
+  app2-fe:
+    build:
+      context: ./app2-fe
+      dockerfile: Dockerfile
+    restart: always
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+    networks:
+      - dso4
+      - proxy
+
+volumes:
+  db_postgres_data:
+  app2_uploads:
+
+networks:
+  dso4:
+  proxy:
+    external: true
