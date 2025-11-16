@@ -1,3 +1,5 @@
+// app2/src/controllers/thread.controller.js
+import { Prisma } from '@prisma/client'; 
 import { prisma } from '../config/prisma.js';
 
 // Controller untuk melihat daftar thread (Guest Access)
@@ -114,9 +116,13 @@ export const searchThreads = async (req, res) => {
     // Input yang dicari: "%" + keyword + "%"
     // Contoh Payload SQL Injection: ' OR 1=1 -- 
 
-    // ** IMPLEMENTASI RENTAN: String Concatenation untuk SQL Injection **
+    // Perbaikan AMAN: Menggunakan Parameterized Query dengan Prisma.sql
     try {
-        const sqlQuery = `
+        // [Perbaikan SQLI] Menggunakan template literal yang ditag dengan Prisma.sql 
+        // untuk memastikan variabel 'keyword' diperlakukan sebagai data.
+        const searchPattern = `%${keyword}%`;
+        
+        const threads = await prisma.$queryRaw(Prisma.sql`
             SELECT 
                 t.thread_id, 
                 t.title, 
@@ -126,19 +132,13 @@ export const searchThreads = async (req, res) => {
                 u.profile_picture_path AS author_profile_picture_path
             FROM "thread" t
             JOIN "user" u ON t.user_id = u.user_id
-            WHERE t.title ILIKE '%${keyword}%' OR t.content ILIKE '%${keyword}%'
+            WHERE t.title ILIKE ${searchPattern} OR t.content ILIKE ${searchPattern}
             ORDER BY t.created_at DESC;
-        `;
-        
-        // Menggunakan prisma.$queryRawUnsafe untuk mengeksekusi SQL mentah tanpa sanitasi
-        const threads = await prisma.$queryRawUnsafe(sqlQuery);
+        `); // <-- Menggunakan $queryRaw dan tagged template literal
 
-        // parameterized query yang AMAN (sebagai perbandingan):
-        // const safeQuery = Prisma.sql`... WHERE t.title ILIKE ${'%' + keyword + '%'}`;
-        // const threads = await prisma.$queryRaw(safeQuery);
         
         res.status(200).json({
-            message: "Hasil pencarian berhasil diambil (VULNERABLE SQLi)",
+            message: "Hasil pencarian berhasil diambil (SQLi Fixed)",
             data: threads
         });
 
