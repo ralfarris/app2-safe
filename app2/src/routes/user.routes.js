@@ -7,7 +7,6 @@ const router = Router();
 
 // User Access
 router.get('/profile', authenticateToken, getOwnProfile);
-router.delete('/profile', authenticateToken, deleteAccount);
 router.put('/profile', authenticateToken, uploadProfilePicture, updateProfile); 
 
 // Guest Access
