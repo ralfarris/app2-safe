@@ -437,7 +437,7 @@ function Profile({ forceLogout }) {
                     </Avatar>
                     
                     <div className="flex flex-col gap-1">
-                        <h2 className="text-2xl font-bold">{userProfile.username}</h2>
+                        <h2 className="text-2xl font-bold">@{userProfile.username}</h2>
                         <p className="text-sm text-muted-foreground whitespace-pre-line">
                             {userProfile.bio}
                         </p>
@@ -445,7 +445,10 @@ function Profile({ forceLogout }) {
                 </div>
 
                 {/* Tombol Edit Profile */}
-                <div className="flex justify-end gap-3 pt-4 border-t">
+                <div className="flex justify-between items-center pt-4 border-t"> 
+                    <Button variant="destructive" disabled> 
+                        Delete Account (Endpoint Dihapus)
+                    </Button>
                     <Button onClick={() => setEditing(true)}>
                         Edit Profile
                     </Button>
