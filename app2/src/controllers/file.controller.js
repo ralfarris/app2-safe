@@ -2,6 +2,7 @@ import path from 'path';
 import fs from 'fs';
 import { prisma } from '../config/prisma.js';
 
+// Tentukan root direktori unggahan (penting untuk validasi path)
 const UPLOAD_ROOT_DIR = path.join(process.cwd(), 'uploads'); 
 
 // *** TARGET KERENTANAN A04:2021 (Path Traversal/LFI) ***
@@ -13,30 +14,31 @@ export const getFileAttachment = async (req, res) => {
         return res.status(400).json({ message: "Parameter filePath diperlukan." });
     }
 
-    // --- IMPLEMENTASI RENTAN ---
-    // Tidak ada sanitasi path atau normalisasi.
-    // Jika path berisi `../`, path akan keluar dari direktori `uploads`.
-    const absolutePath = path.join(UPLOAD_ROOT_DIR, filePath);
+    // [Perbaikan LFI] Menggunakan path.normalize dan path.resolve untuk mencegah Path Traversal
     
-    // Opsional: Cek database untuk memastikan file ada dan path valid
-    // Kita lewati langkah ini untuk menjaga kesederhanaan dan fokus pada Path Traversal di OS.
+    // 1. Normalisasi path untuk menghapus .. dan .
+    const normalizedPath = path.normalize(filePath);
 
-    if (!fs.existsSync(absolutePath)) {
-        console.warn(`File not found: ${absolutePath}`);
+    // 2. Tentukan Path Absolut yang DIMAKSUD
+    const absolutePath = path.join(UPLOAD_ROOT_DIR, normalizedPath);
+    
+    // 3. PENTING: Periksa Path Traversal (Harus di dalam UPLOAD_ROOT_DIR)
+    // path.resolve akan menghasilkan path absolut sebenarnya dari path masukan.
+    const resolvedPath = path.resolve(absolutePath);
+
+    if (!resolvedPath.startsWith(UPLOAD_ROOT_DIR)) {
+        console.warn(`Path Traversal attempt blocked: ${filePath}`);
+        return res.status(403).json({ message: "Akses ditolak (Path Traversal)." }); // <-- Blokir akses
+    }
+
+    if (!fs.existsSync(resolvedPath)) { // <-- Gunakan resolvedPath
+        console.warn(`File not found: ${resolvedPath}`);
         return res.status(404).json({ message: "File attachment tidak ditemukan." });
     }
     
-    // Cek apakah file yang diminta berada di dalam UPLOAD_ROOT_DIR.
-    // Jika absolutePath berada di luar UPLOAD_ROOT_DIR, ini adalah Path Traversal.
-
-    // Pemeriksaan Aman (yang kita tidak gunakan untuk demonstrasi kerentanan):
-    // if (!absolutePath.startsWith(UPLOAD_ROOT_DIR)) {
-    //     return res.status(403).json({ message: "Akses path ditolak." });
-    // }
-
     try {
         // Mengirimkan file ke klien
-        res.sendFile(absolutePath);
+        res.sendFile(resolvedPath); // <-- Gunakan resolvedPath
     } catch (error) {
         console.error("Error sending file:", error);
         res.status(500).json({ message: "Gagal menyajikan file." });
@@ -44,6 +46,7 @@ export const getFileAttachment = async (req, res) => {
 };
 
 // Fungsi bantuan untuk mendapatkan path dari database (Jika ingin menggunakan ID)
+// *** TARGET KERENTANAN A-3: Path Traversal/LFI (via Attachment ID) ***
 export const getAttachmentById = async (req, res) => {
     const attachmentId = parseInt(req.params.id);
 
@@ -59,16 +62,24 @@ export const getAttachmentById = async (req, res) => {
         // Mengambil file_path dari database
         const filePath = attachment.file_path; 
 
-        // --- IMPLEMENTASI RENTAN (Path Traversal/LFI) ---
-        // Penyerang yang memiliki akses ke database (melalui SQLi atau BAC lain)
-        // dapat mengubah `file_path` menjadi `../../../etc/passwd`.
-        const absolutePath = path.join(process.cwd(), filePath);
+        // [Perbaikan LFI] Menggunakan logika validasi path yang sama
+        // 1. Tentukan Path Absolut yang DIMAKSUD
+        const absolutePath = path.join(UPLOAD_ROOT_DIR, filePath);
+        
+        // 2. PENTING: Verifikasi Path Traversal dengan path.resolve
+        const resolvedPath = path.resolve(absolutePath);
 
-        if (!fs.existsSync(absolutePath)) {
+        if (!resolvedPath.startsWith(UPLOAD_ROOT_DIR)) {
+            console.warn(`Path Traversal attempt blocked (Attachment ID): ${filePath}`);
+            return res.status(403).json({ message: "Akses ditolak (Path Traversal)." }); // <-- Blokir akses
+        }
+
+
+        if (!fs.existsSync(resolvedPath)) {
             return res.status(404).json({ message: "File fisik tidak ditemukan." });
         }
         
-        res.sendFile(absolutePath);
+        res.sendFile(resolvedPath);
 
     } catch (error) {
         console.error("Error fetching attachment by ID:", error);
