@@ -1,6 +1,6 @@
 import { prisma } from '../config/prisma.js';
 
-// *** TARGET KERENTANAN A03:2021-Injection (XSS) pada 'content' ***
+// *** TARGET KERENTANAN X-11: Injection (XSS) pada 'content' ***
 export const createPost = async (req, res) => {
     const currentUserId = req.user.user_id;
     const threadId = parseInt(req.params.threadId);
@@ -39,8 +39,9 @@ export const createPost = async (req, res) => {
     }
 };
 
-// *** TARGET KERENTANAN A01:2021-Broken Access Control (BAC) ***
+// *** TARGET KERENTANAN C-8: Broken Access Control (BAC) - Post Update ***
 export const updatePost = async (req, res) => {
+    const currentUserId = req.user.user_id;
     const postId = parseInt(req.params.postId);
     const { content } = req.body;
 
@@ -52,12 +53,11 @@ export const updatePost = async (req, res) => {
     }
 
     try {
-        // --- IMPLEMENTASI RENTAN (BAC): Tidak ada pengecekan kepemilikan ---
-        // Seharusnya ada 'user_id: req.user.user_id' di dalam 'where' clause.
-        // Tanpa itu, setiap pengguna terotentikasi dapat mengedit post milik siapa pun.
+        // [Perbaikan BAC] Menambahkan user_id di kondisi where
         const updatedPost = await prisma.post.update({
             where: {
                 post_id: postId,
+                user_id: currentUserId, // <-- BARIS BARU: Memastikan hanya pemilik yang bisa update
             },
             data: {
                 content,
@@ -65,21 +65,22 @@ export const updatePost = async (req, res) => {
         });
 
         res.status(200).json({
-            message: "Balasan berhasil diperbarui (VULNERABLE BAC)",
+            message: "Balasan berhasil diperbarui (BAC Fixed)", // Ubah pesan
             post: updatedPost,
         });
 
     } catch (error) {
         if (error.code === 'P2025') {
-            return res.status(404).json({ message: "Balasan tidak ditemukan." });
+            return res.status(404).json({ message: "Balasan tidak ditemukan atau Anda tidak memiliki izin untuk mengeditnya." });
         }
         console.error("Error updating post:", error);
         res.status(500).json({ message: "Gagal memperbarui balasan.", error: error.message });
     }
 };
 
-// *** TARGET KERENTANAN A01:2021-Broken Access Control (BAC) ***
+// *** TARGET KERENTANAN C-9: Broken Access Control (BAC) - Post Delete ***
 export const deletePost = async (req, res) => {
+    const currentUserId = req.user.user_id;
     const postId = parseInt(req.params.postId);
 
     if (isNaN(postId)) {
@@ -87,20 +88,19 @@ export const deletePost = async (req, res) => {
     }
 
     try {
-        // --- IMPLEMENTASI RENTAN (BAC): Tidak ada pengecekan kepemilikan ---
-        // Sama seperti update, endpoint ini memungkinkan pengguna mana pun
-        // untuk menghapus post milik pengguna lain.
+        // [Perbaikan BAC] Menambahkan user_id di kondisi where
         await prisma.post.delete({
             where: {
                 post_id: postId,
+                user_id: currentUserId, // <-- BARIS BARU: Memastikan hanya pemilik yang bisa delete
             },
         });
 
-        res.status(200).json({ message: "Balasan berhasil dihapus (VULNERABLE BAC)." });
+        res.status(200).json({ message: "Balasan berhasil dihapus (BAC Fixed)." }); // Ubah pesan
 
     } catch (error) {
         if (error.code === 'P2025') {
-            return res.status(404).json({ message: "Balasan tidak ditemukan." });
+            return res.status(404).json({ message: "Balasan tidak ditemukan atau Anda tidak memiliki izin untuk menghapusnya." });
         }
         console.error("Error deleting post:", error);
         res.status(500).json({ message: "Gagal menghapus balasan.", error: error.message });

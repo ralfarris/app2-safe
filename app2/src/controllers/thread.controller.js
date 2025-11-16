@@ -105,7 +105,7 @@ export const getThreadDetail = async (req, res) => {
     }
 };
 
-// *** TARGET KERENTANAN A03:2021-Injection (SQL Injection) ***
+// *** TARGET KERENTANAN I-1: SQL Injection (SQLi) - FIXED ***
 export const searchThreads = async (req, res) => {
     const keyword = req.query.q;
 
@@ -113,13 +113,8 @@ export const searchThreads = async (req, res) => {
         return res.status(400).json({ message: "Kata kunci pencarian ('q') diperlukan." });
     }
 
-    // Input yang dicari: "%" + keyword + "%"
-    // Contoh Payload SQL Injection: ' OR 1=1 -- 
-
     // Perbaikan AMAN: Menggunakan Parameterized Query dengan Prisma.sql
     try {
-        // [Perbaikan SQLI] Menggunakan template literal yang ditag dengan Prisma.sql 
-        // untuk memastikan variabel 'keyword' diperlakukan sebagai data.
         const searchPattern = `%${keyword}%`;
         
         const threads = await prisma.$queryRaw(Prisma.sql`
@@ -134,7 +129,7 @@ export const searchThreads = async (req, res) => {
             JOIN "user" u ON t.user_id = u.user_id
             WHERE t.title ILIKE ${searchPattern} OR t.content ILIKE ${searchPattern}
             ORDER BY t.created_at DESC;
-        `); // <-- Menggunakan $queryRaw dan tagged template literal
+        `);
 
         
         res.status(200).json({
@@ -149,7 +144,7 @@ export const searchThreads = async (req, res) => {
 };
 
 
-// *** TARGET KERENTANAN A03:2021-Injection (XSS) pada 'content' ***
+// *** TARGET KERENTANAN X-10: Injection (XSS) pada 'content' ***
 export const createThread = async (req, res) => {
     const currentUserId = req.user.user_id;
     const { title, content } = req.body;
@@ -160,7 +155,6 @@ export const createThread = async (req, res) => {
 
     try {
         // ** IMPLEMENTASI RENTAN: Tidak ada sanitasi pada 'content' **
-        // Prisma akan menyimpannya apa adanya, termasuk script HTML.
         const newThread = await prisma.thread.create({
             data: {
                 user_id: currentUserId,
@@ -180,6 +174,7 @@ export const createThread = async (req, res) => {
     }
 };
 
+// *** TARGET KERENTANAN C-7: Broken Access Control (BAC) - Thread Update ***
 export const updateThread = async (req, res) => {
     const currentUserId = req.user.user_id;
     const threadId = parseInt(req.params.id);
@@ -190,11 +185,20 @@ export const updateThread = async (req, res) => {
     }
 
     try {
-        // --- IMPLEMENTASI RENTAN (BAC): Pengecekan Kepemilikan Dihilangkan atau Cacat ---
-        // Seharusnya: Cek kepemilikan: const thread = await prisma.thread.findUnique({ where: { thread_id: threadId } });
-        // Lalu: if (thread.user_id !== currentUserId) { return res.status(403).json({ message: "Akses ditolak." }); }
+        // [Perbaikan BAC] 1. Cek kepemilikan resource
+        const thread = await prisma.thread.findUnique({
+            where: { thread_id: threadId },
+        });
 
-        // KITA HANYA MEMASTIKAN THREAD ADA, BUKAN SIAPA PEMILIKNYA
+        if (!thread) {
+            return res.status(404).json({ message: "Thread tidak ditemukan." });
+        }
+        
+        if (thread.user_id !== currentUserId) {
+            return res.status(403).json({ message: "Akses Ditolak. Anda hanya dapat mengedit thread milik Anda sendiri." });
+        }
+        // --- END Perbaikan BAC ---
+        
         const updatedThread = await prisma.thread.update({
             where: {
                 thread_id: threadId,
@@ -206,7 +210,7 @@ export const updateThread = async (req, res) => {
         });
 
         res.status(200).json({
-            message: "Thread berhasil diperbarui (VULNERABLE BAC)",
+            message: "Thread berhasil diperbarui (BAC Fixed)", // Ubah pesan
             thread: updatedThread
         });
 
@@ -219,7 +223,7 @@ export const updateThread = async (req, res) => {
     }
 };
 
-// *** TARGET KERENTANAN A01:2021-Broken Access Control (BAC) ***
+// *** TARGET KERENTANAN C-6: Broken Access Control (BAC) - Thread Delete ***
 export const deleteThread = async (req, res) => {
     const currentUserId = req.user.user_id;
     const threadId = parseInt(req.params.id);
@@ -229,24 +233,21 @@ export const deleteThread = async (req, res) => {
     }
 
     try {
-        // --- IMPLEMENTASI RENTAN (BAC): Pengecekan Kepemilikan Dihilangkan ---
-        // KITA HANYA MEMASTIKAN THREAD ADA SAAT PENGHAPUSAN.
-        // Jika kita hanya menghapus berdasarkan thread_id, User A dapat menghapus thread milik User B.
-
+        // [Perbaikan BAC] Menambahkan user_id di kondisi where
         await prisma.thread.delete({
             where: {
                 thread_id: threadId,
-                // KODE AMAN AKAN MEMPUNYAI: user_id: currentUserId,
+                user_id: currentUserId, // <-- BARIS BARU: Memastikan hanya pemilik yang bisa menghapus
             }
         });
 
         res.status(200).json({
-            message: "Thread berhasil dihapus (VULNERABLE BAC)."
+            message: "Thread berhasil dihapus (BAC Fixed)." // Ubah pesan
         });
 
     } catch (error) {
         if (error.code === 'P2025') {
-            return res.status(404).json({ message: "Thread tidak ditemukan." });
+            return res.status(404).json({ message: "Thread tidak ditemukan atau Anda tidak memiliki izin untuk menghapusnya." });
         }
         console.error("Error deleting thread:", error);
         res.status(500).json({ message: "Gagal menghapus thread.", error: error.message });
