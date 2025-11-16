@@ -27,7 +27,7 @@ function getCurrentUser() {
     const userProfileString = localStorage.getItem("userProfile");
     if (userProfileString) {
         try {
-            return JSON.parse(userProfileString);
+            return JSON.parse(userProfileString); 
         } catch (e) {
             return null;
         }
@@ -69,12 +69,7 @@ const PostItem = ({ post, isMainThread = false, currentUserId, onPostDeleted, on
     const [editContent, setEditContent] = useState(post.content || '');
     const authorAvatarUrl = post.author.profile_picture_path ? resolveImageUrl(post.author.profile_picture_path) : '';
 
-    // Fungsi untuk mensanitasi konten (VULNERABLE XSS SIMULATION)
-    const renderContent = (content) => {
-        // PERHATIAN: Ini adalah implementasi SANGAT TIDAK AMAN yang sengaja 
-        // digunakan untuk mensimulasikan dan menguji kerentanan XSS (A03)
-        return <div dangerouslySetInnerHTML={{ __html: content }} />;
-    };
+    // [PERBAIKAN XSS FRONTEND] Fungsi renderContent dihilangkan dan konten dirender sebagai teks biasa
 
     // --- Handler Edit ---
     const handleEditPost = async () => {
@@ -92,7 +87,7 @@ const PostItem = ({ post, isMainThread = false, currentUserId, onPostDeleted, on
                     },
                     body: JSON.stringify({
                         title: post.title, 
-                        content: editContent, // VULNERABLE BAC + XSS
+                        content: editContent, 
                     }),
                 });
 
@@ -117,13 +112,13 @@ const PostItem = ({ post, isMainThread = false, currentUserId, onPostDeleted, on
                         'Authorization': `Bearer ${token}`,
                     },
                     body: JSON.stringify({
-                        content: editContent, // VULNERABLE BAC + XSS
+                        content: editContent,
                     }),
                 });
 
                 if (!response.ok) {
                     const errorData = await response.json();
-                    throw new Error(errorData.message || "Gagal mengedit post. (Cek A01: BAC)");
+                    throw new Error(errorData.message || "Gagal mengedit post.");
                 }
 
                 toast.success("Post berhasil diperbarui.");
@@ -156,7 +151,7 @@ const PostItem = ({ post, isMainThread = false, currentUserId, onPostDeleted, on
         
         try {
             const response = await fetch(endpoint, {
-                method: 'DELETE', // VULNERABLE BAC
+                method: 'DELETE',
                 headers: {
                     'Authorization': `Bearer ${token}`,
                 },
@@ -168,7 +163,7 @@ const PostItem = ({ post, isMainThread = false, currentUserId, onPostDeleted, on
             }
 
             toast.success(`${isMainThread ? 'Thread' : 'Post'} berhasil dihapus.`);
-            onPostDeleted(isMainThread); // Muat ulang data atau redirect jika thread utama
+            onPostDeleted(isMainThread); 
         } catch (error) {
             toast.error(`Gagal menghapus ${isMainThread ? 'thread' : 'post'}.`);
         }
@@ -223,8 +218,8 @@ const PostItem = ({ post, isMainThread = false, currentUserId, onPostDeleted, on
                 )}
 
                 {/* Konten Post */}
-                <div className={`text-gray-700 mb-4 ${isReply ? 'ml-14' : ''}`}>
-                    {renderContent(post.content)} 
+                <div className={`text-gray-700 mb-4 whitespace-pre-line ${isReply ? 'ml-14' : ''}`}>
+                    {post.content} {/* <-- PERBAIKAN AKHIR: Merender sebagai teks biasa */}
                 </div>
 
                 {/* Media/Attachments */}
@@ -246,7 +241,7 @@ const PostItem = ({ post, isMainThread = false, currentUserId, onPostDeleted, on
                     </div>
                 )}
 
-                {/* Footer Interaksi (Permintaan #1: Konsisten Icon) */}
+                {/* Footer Interaksi */}
                 <hr className="my-3"/>
                 <div className="flex justify-end gap-6 text-sm text-gray-600">
                     <span className="flex items-center gap-1">
@@ -292,7 +287,7 @@ export default function ThreadPage({ forceLogout }) {
     const currentUser = getCurrentUser();
     const currentUserId = getCurrentUserId();
     const { forceLogout: globalForceLogout } = useAuthLogout();
-    const actualForceLogout = forceLogout || globalForceLogout; // Use injected forceLogout if available
+    const actualForceLogout = forceLogout || globalForceLogout;
     
     const [mainThread, setMainThread] = useState(null);
     const [posts, setPosts] = useState([]);
@@ -453,7 +448,7 @@ export default function ThreadPage({ forceLogout }) {
                     'Authorization': `Bearer ${token}`,
                 },
                 body: JSON.stringify({
-                    content: replyContent, // VULNERABLE XSS (A03)
+                    content: replyContent, 
                 }),
             });
 
@@ -472,9 +467,8 @@ export default function ThreadPage({ forceLogout }) {
                     method: 'POST',
                     headers: {
                         'Authorization': `Bearer ${token}`,
-                        // Content-Type tidak perlu diset, karena FormData akan menanganinya
                     },
-                    body: formData, // VULNERABLE RCE/Path Traversal (A03, A04)
+                    body: formData, 
                 });
 
                 if (!attachmentResponse.ok) {
