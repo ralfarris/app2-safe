@@ -1,5 +1,5 @@
 services:
-  db_postgres:
+  db_postgres-safe:
     image: postgres:17-alpine
     restart: always
     environment:
@@ -7,11 +7,11 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-testpass}
       POSTGRES_DB: ${POSTGRES_DB:-app2_db}
     volumes:
-      - db_postgres_data:/var/lib/postgresql/data
+      - db_postgres_data-safe:/var/lib/postgresql/data
     networks:
       - dso4
 
-  app2:
+  app2-safe:
     build:
       context: ./app2
       dockerfile: Dockerfile
@@ -26,9 +26,9 @@ services:
       - dso4
       - proxy
     volumes:
-      - app2_uploads:/app/uploads 
+      - app2_uploads-safe:/app/uploads 
 
-  app2-fe:
+  app2-fe-safe:
     build:
       context: ./app2-fe
       dockerfile: Dockerfile
@@ -40,8 +40,8 @@ services:
       - proxy
 
 volumes:
-  db_postgres_data:
-  app2_uploads:
+  db_postgres_data-safe:
+  app2_uploads-safe:
 
 networks:
   dso4:
