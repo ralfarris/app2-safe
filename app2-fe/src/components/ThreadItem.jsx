@@ -30,11 +30,9 @@ function getCurrentUser() {
 export default function ThreadItem({ thread, onLikeClick }) {
     const navigate = useNavigate();
     const currentUser = getCurrentUser();
-    // PERHATIAN: Ini adalah implementasi SANGAT TIDAK AMAN yang sengaja 
-    // digunakan untuk mensimulasikan dan menguji kerentanan XSS (A03)
-    const renderContent = (content) => {
-        return <div dangerouslySetInnerHTML={{ __html: content }} />;
-    };
+    
+    // [PERBAIKAN XSS FRONTEND] Menghapus fungsi renderContent yang menggunakan dangerouslySetInnerHTML
+    // dan merender konten sebagai teks biasa di JSX.
 
     const threadUrl = `/thread/${thread.id}`;
     const handleCardClick = () => navigate(threadUrl);
@@ -76,8 +74,8 @@ export default function ThreadItem({ thread, onLikeClick }) {
             <div className="flex flex-col gap-2">
                 <h2 className="font-semibold text-lg">{thread.title}</h2>
                 
-                <div className="text-gray-700 mb-2">
-                    {renderContent(thread.content)}
+                <div className="text-gray-700 mb-2 whitespace-pre-line">
+                    {thread.content} {/* <-- PERBAIKAN: Merender sebagai teks biasa */}
                 </div>
             </div>
 
