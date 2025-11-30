@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
-TARGET_DIR="/home/dso504/project-dso"
-REPO_URL="https://dso504:${GH_PAT}@github.com/qznr/project-dso.git"
+TARGET_DIR="/home/dso504/app2-safe"
+REPO_URL="https://dso504:${GH_PAT}@github.com/ralfarris/app2-safe"
 SERVICE_NAME="app2"
 
 echo ">>> Checking and pulling/cloning code on remote..."
