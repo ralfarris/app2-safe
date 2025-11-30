@@ -1,0 +1,304 @@
+rules:
+  # 1. Prisma unsafe raw SQL
+  - id: prisma-unsafe-raw
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    message: "Use of Prisma unsafe raw query detected — high risk for SQL injection. Prefer parameterized prisma.$queryRaw or model APIs."
+    pattern-either:
+      - pattern: |
+          prisma.$queryRawUnsafe($SQL)
+      - pattern: |
+          prisma.$executeRawUnsafe($SQL)
+
+  # 2. Prisma raw query receiving user input (two-step taint pattern)
+  - id: prisma-raw-direct-req
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    message: "Prisma raw query called directly with request-provided data — validate and parameterize to prevent SQL injection."
+    pattern-either:
+      - pattern: |
+          prisma.$queryRawUnsafe(req.$ANY)
+      - pattern: |
+          prisma.$executeRawUnsafe(req.$ANY)
+
+  # 3. JWT hardcoded secret detect literal strings as secret arguments
+  - id: jwt-hardcoded-secret-literal
+    languages:
+      - javascript
+      - typescript
+    severity: ERROR
+    message: "Hardcoded JWT secret detected. Use environment variables and secure secret management."
+    pattern-either:
+      - pattern: |
+          jwt.sign($PAYLOAD, "$SECRET", $OPTS)
+      - pattern: |
+          jwt.sign($PAYLOAD, '$SECRET', $OPTS)
+      - pattern: |
+          jwt.verify($TOKEN, "$SECRET", $OPTS)
+      - pattern: |
+          jwt.verify($TOKEN, '$SECRET', $OPTS)
+
+  # 6. File upload without validation detect multer setup without fileFilter option
+  - id: multer-instantiated
+    languages:
+      - javascript
+      - typescript
+    severity: WARNING
+    message: "Multer instantiated; ensure you provide fileFilter or otherwise validate uploaded files."
+    pattern-either:
+      - pattern: |
+          const $UPLOAD = multer($OPTS)
+      - pattern: |
+          const $UPLOAD = multer()
+      - pattern: |
+          var $UPLOAD = multer($OPTS)
+
+  # 7. File upload single/endpoints without explicit validation middleware (e.g., upload.single)
+  - id: upload-endpoint-usage
+    languages:
+      - javascript
+      - typescript
+    severity: INFO
+    message: "Upload handler usage detected (upload.single/upload.any/upload.array). Confirm server-side validation of file type/size."
+    pattern-either:
+      - pattern: |
+          upload.single($FIELD)
+      - pattern: |
+          upload.any()
+      - pattern: |
+          upload.array($FIELD, $N)
+
+  # 8. Reflected user input (direct) — res.send/render with req.* (common XSS source)
+  - id: reflected-input-direct
+    languages:
+      - javascript
+      - typescript
+    severity: WARNING
+    message: "User input (req.*) is sent directly in response — possible reflected XSS if not escaped/encoded."
+    pattern-either:
+      - pattern: |
+          res.send(req.body)
+      - pattern: |
+          res.send(req.query)
+      - pattern: |
+          res.send(req.params)
+      - pattern: |
+          res.json(req.body)
+      - pattern: |
+          res.json(req.query)
+      - pattern: |
+          res.render($TEMPLATE, { $KEY: req.body })
+      - pattern: |
+          res.render($TEMPLATE, { $KEY: req.query })
+
+  # 9. Indirect reflected input — var assigned from req then sent
+  - id: reflected-input-indirect
+    languages:
+      - javascript
+      - typescript
+    severity: WARNING
+    message: |
+      User input from the request is being sent back to the client without apparent sanitization. 
+      This could lead to Reflected XSS. 
+      If you have sanitized this input (e.g., using sanitizeContent, sanitizeBio), ensure the sanitizer is registered in the rule.
+    mode: taint
+    pattern-sources:
+      # Sources of user input (Tainted data)
+      - pattern: req.body
+      - pattern: req.query
+      - pattern: req.params
+      - pattern: req.headers
+    pattern-sanitizers:
+      - pattern: sanitizeContent(...)
+      - pattern: sanitizeBio(...)
+      - pattern: sanitizeStrict(...)
+      
+      # 2. Type conversions (Integers/Booleans are safe from XSS)
+      - pattern: parseInt(...)
+      - pattern: parseFloat(...)
+      - pattern: Number(...)
+      - pattern: Boolean(...)
+      
+      # 3. Path normalization (Safe for LFI/Path Traversal checks)
+      - pattern: path.resolve(...)
+      - pattern: path.normalize(...)
+      
+      # 4. Crypto hashing (Hashed passwords/tokens are safe strings)
+      - pattern: bcrypt.hash(...)
+      - pattern: jwt.sign(...)
+
+    pattern-sinks:
+      # Sinks: Where the data leaves the application
+      - pattern: res.send(...)
+      - pattern: res.write(...)
+      - pattern: res.end(...)
+
+  # 10. Password stored or compared in plaintext
+  - id: plaintext-password
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Potential plaintext password handling detected. Hash passwords before storing or comparing."
+    pattern-either:
+      - pattern: |
+          const $PWD = req.body.password
+      - pattern: |
+          user.password = $PWD
+      - pattern: |
+          if ($A.password === $B.password)
+
+  # 11. Dangerous dynamic code execution
+  - id: dangerous-eval
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Dynamic code execution via eval/Function/child_process detected — high risk for RCE."
+    pattern-either:
+      - pattern: |
+          eval($EXPR)
+      - pattern: |
+          new Function($ARGS)
+      - pattern: |
+          require('child_process').exec($CMD)
+      - pattern: |
+          require('child_process').execSync($CMD)
+
+  # 12. File system path traversal
+  - id: path-traversal-fs
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "File system operation using request-controlled input detected — validate/sanitize paths to avoid traversal."
+    pattern-either:
+      - pattern: |
+          fs.readFileSync(req.$ANY)
+      - pattern: |
+          fs.writeFileSync(req.$ANY, $DATA)
+      - pattern: |
+          fs.unlinkSync(req.$ANY)
+      - pattern: |
+          fs.readFile(req.$ANY)
+      - pattern: |
+          fs.writeFile(req.$ANY, $DATA)
+
+  # 13. Insecure file serving
+  - id: res-sendfile-userinput
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "res.sendFile or res.download with request-controlled input — potential path traversal or unauthorized file access."
+    pattern-either:
+      - pattern: |
+          res.sendFile(req.$ANY)
+      - pattern: |
+          res.download(req.$ANY)
+
+  # 14. Missing security headers
+  - id: missing-security-headers
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "Security headers present (helmet or explicit header settings). If not present, consider adding appropriate headers."
+    pattern-either:
+      - pattern: |
+          app.use(helmet())
+      - pattern: |
+          app.use(require('helmet')())
+      - pattern: |
+          res.set('Content-Security-Policy', $ANY)
+      - pattern: |
+          res.set('X-Frame-Options', $ANY)
+      - pattern: |
+          res.set('X-Content-Type-Options', $ANY)
+
+  # 15. Direct user input in database queries (manual SQL string concatenation)
+  - id: manual-sql-concat-req
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Dynamic SQL constructed by concatenating request data detected — use parameterized queries or ORM-safe APIs."
+    pattern-either:
+      - pattern: |
+          const $SQL = "SELECT " + req.$ANY
+      - pattern: |
+          const $SQL = "SELECT" + req.$ANY
+
+
+  # 16. Raw SQL query using user-controlled input (Express.js)
+  - id: express-raw-sql-userinput
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Potential SQL injection - raw query with user input. Use parameterized queries or Prisma's safe query methods."
+    pattern-either:
+      - pattern: |
+          $DB.query($SQL + req.$INPUT)
+      - pattern: |
+          $DB.query(`...${req.$INPUT}...`)
+      - pattern: |
+          $DB.query("..." + req.$INPUT + "...")
+      - pattern: |
+          $DB.execute($SQL + req.$INPUT)
+      - pattern: |
+          $DB.execute(`...${req.$INPUT}...`)
+      - pattern: |
+          prisma.$executeRaw($SQL + req.$INPUT)
+      - pattern: |
+          prisma.$executeRaw(`...${req.$INPUT}...`)
+
+  # 17. Unsafe SQL string construction
+  - id: sql-string-concatenation
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "SQL query built using string concatenation - risk of SQL injection. Use parameterized queries."
+    pattern-either:
+      - pattern: |
+          const $SQL = "SELECT * FROM " + $INPUT
+      - pattern: |
+          const $SQL = `SELECT * FROM ${$INPUT}`
+      - pattern: |
+          const $SQL = "INSERT INTO " + $INPUT
+      - pattern: |
+          const $SQL = "UPDATE " + $TABLE + " SET " + $INPUT
+      - pattern: |
+          const $SQL = "DELETE FROM " + $TABLE + " WHERE " + $INPUT
+
+  # 18. ORM raw queries with user input
+  - id: orm-raw-query-unsafe
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "ORM raw query with potential user input - SQL injection risk. Use query builder or parameterized queries."
+    pattern-either:
+      - pattern: |
+          prisma.$queryRawUnsafe($SQL)
+      - pattern: |
+          prisma.$executeRawUnsafe($SQL)
+      - pattern: |
+          sequelize.query($SQL, { type: QueryTypes.SELECT })
+      - pattern: |
+          knex.raw($SQL)
+
+  # 19. Two-step SQL injection via variable
+  - id: sql-injection-via-variable
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Possible SQL injection through variable assignment. Validate input and use parameterized queries."
+    patterns:
+      - pattern: |
+          $VAR = req.$INPUT
+      - pattern: |
+          $DB.query("SELECT * FROM users WHERE " + $VAR)
+
+  # 20. Missing authorization
+  - id: missing-authorization
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Sensitive action without authorization check — ensure proper access control."
+    pattern-either:
+      - pattern: |
+          app.post('/admin', (req, res) => { ... })
+      - pattern: |
+          app.get('/user', (req, res) => { ... })
+      - pattern: |
+          app.delete('/resource', (req, res) => { ... })
+      - pattern: |
+          app.put('/resource', (req, res) => { ... })
+    metadata:
+      recommendation: "Ensure all sensitive actions are protected with proper authorization checks."
